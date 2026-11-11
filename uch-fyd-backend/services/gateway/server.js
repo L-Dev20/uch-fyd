@@ -1,6 +1,9 @@
 require("../../scripts/load-env");
+process.env.SERVICE_NAME = "gateway";
 const { randomUUID } = require("node:crypto");
 const { createServiceServer, json, rawBody, listen, HttpError } = require("../../lib/http");
+const { logError, installProcessDiagnostics } = require("../../lib/diagnostics");
+installProcessDiagnostics("gateway");
 const PORT = Number(process.env.GATEWAY_PORT || 4100);
 const routes = [
   ["/api/v1/identidad", process.env.IDENTITY_URL || "http://localhost:4101"],
@@ -43,7 +46,7 @@ const server = createServiceServer(async (req, res, requestId) => {
       signal: AbortSignal.timeout(10_000)
     });
   } catch (error) {
-    console.error(JSON.stringify({ requestId, upstream: target.origin, message: error.message }));
+    logError({ service: "gateway", stage: "upstream_fetch", requestId, upstream: target.origin, method: req.method, path: url.pathname }, error);
     return json(res, 503, { error: "UPSTREAM_UNAVAILABLE", message: "El servicio está temporalmente no disponible.", requestId });
   }
   const responseBody = Buffer.from(await upstream.arrayBuffer());

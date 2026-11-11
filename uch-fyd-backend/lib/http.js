@@ -1,5 +1,6 @@
 const http = require("node:http");
 const { randomUUID } = require("node:crypto");
+const { logError } = require("./diagnostics");
 
 class HttpError extends Error {
   constructor(status, message, details) { super(message); this.status = status; this.details = details; }
@@ -41,7 +42,7 @@ function createServiceServer(router, options = {}) {
     catch (error) {
       if (res.headersSent) return res.destroy(error);
       const status = Number.isInteger(error.status) ? error.status : 500;
-      if (status >= 500) console.error(JSON.stringify({ requestId, message: error.message, stack: error.stack }));
+      if (status >= 500) logError({ stage: "http_request", requestId, method: req.method, path: req.url, status }, error);
       json(res, status, { error: status >= 500 ? "INTERNAL_ERROR" : "REQUEST_ERROR", message: status >= 500 ? "Ocurrió un error interno." : error.message, ...(error.details ? { details: error.details } : {}), requestId });
     }
   });
@@ -58,7 +59,12 @@ async function callInternal(url, { method = "GET", body, token, requestId } = {}
   let response;
   try {
     response = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(5000) });
-  } catch (cause) { throw Object.assign(new HttpError(503, "Servicio interno no disponible."), { cause }); }
+  } catch (cause) {
+    throw Object.assign(new HttpError(503, "Servicio interno no disponible."), {
+      cause,
+      upstream: new URL(url).origin
+    });
+  }
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new HttpError(response.status, result.message || "Error en servicio interno.", result.details);
   return result;

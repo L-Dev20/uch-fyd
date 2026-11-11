@@ -1,7 +1,10 @@
 require("../../scripts/load-env");
+process.env.SERVICE_NAME = "identity-admin";
 const { MongoClient, ObjectId } = require("mongodb");
 const { createServiceServer, json, readJson, HttpError, callInternal, listen } = require("../../lib/http");
 const { hashPassword, checkPassword, signToken, authenticate, authorize, bearer } = require("../../lib/security");
+const { logError, installProcessDiagnostics } = require("../../lib/diagnostics");
+installProcessDiagnostics("identity-admin");
 const PORT = Number(process.env.IDENTITY_PORT || 4101);
 const client = new MongoClient(process.env.MONGODB_URL || "mongodb://localhost:27017/?replicaSet=rs0", { serverSelectionTimeoutMS: 5000, maxPoolSize: 10 });
 let users;
@@ -80,10 +83,15 @@ async function router(req, res, requestId) {
 }
 
 async function start() {
-  await client.connect(); users = client.db("uchfyd_identity").collection("usuarios");
+  try { await client.connect(); }
+  catch (error) {
+    logError({ service: "identity-admin", stage: "mongodb_connect", database: "uchfyd_identity", configured: Boolean(process.env.MONGODB_URL) }, error);
+    throw error;
+  }
+  users = client.db("uchfyd_identity").collection("usuarios");
   await users.createIndex({ email: 1 }, { unique: true });
   await users.createIndex({ active: 1, role: 1 });
   await seedAdministrator();
   const server = createServiceServer(router); listen(server, PORT, "Servicio de Identidad y Administración");
 }
-start().catch(error => { console.error("No se pudo iniciar Identidad/Administración:", error); process.exit(1); });
+start().catch(error => { logError({ service: "identity-admin", stage: "startup" }, error); process.exit(1); });
