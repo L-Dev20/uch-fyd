@@ -1,0 +1,77 @@
+services:
+  identity-admin:
+    build: .
+    command: ["node", "services/identity-admin/server.js"]
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
+      MONGODB_URL: "${MONGODB_URL}"
+      CATALOG_URL: http://catalog:4102
+      ORDERS_URL: http://orders:4103
+      IDENTITY_PORT: 4101
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@uchfyd.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4101/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 4s
+      retries: 12
+
+  catalog:
+    build: .
+    command: ["node", "services/catalog/server.js"]
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
+      POSTGRES_URL: "${POSTGRES_URL}"
+      CATALOG_PORT: 4102
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4102/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 4s
+      retries: 12
+
+  orders:
+    build: .
+    command: ["node", "services/orders/server.js"]
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
+      POSTGRES_URL: "${POSTGRES_URL}"
+      ORDERS_PORT: 4103
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4103/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 4s
+      retries: 12
+
+  gateway:
+    build: .
+    command: ["node", "services/gateway/server.js"]
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      GATEWAY_PORT: 4100
+      IDENTITY_URL: http://identity-admin:4101
+      CATALOG_URL: http://catalog:4102
+      ORDERS_URL: http://orders:4103
+      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:5500,http://127.0.0.1:5500,null}
+    ports:
+      - "4100:4100"
+    depends_on:
+      identity-admin: { condition: service_healthy }
+      catalog: { condition: service_healthy }
+      orders: { condition: service_healthy }
+    restart: unless-stopped
+
+  web:
+    build: ../uch-fyd-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      gateway: { condition: service_started }
+    restart: unless-stopped
