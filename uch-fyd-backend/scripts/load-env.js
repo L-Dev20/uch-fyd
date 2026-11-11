@@ -10,10 +10,9 @@ if (fs.existsSync(file)) {
     const key = line.slice(0, separator).trim();
     let value = line.slice(separator + 1).trim();
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
-    if (key.startsWith("POSTGRES_")) process.env[key] = value;
+    if (key.startsWith("MYSQL_")) process.env[key] = value;
     else if (process.env[key] === undefined) process.env[key] = value;
   }
-  // Local development uses the split PostgreSQL settings from .env. Ignore a
-  // stale POSTGRES_URL inherited from a previous shell or user-level variable.
-  if (process.env.POSTGRES_HOST && process.env.POSTGRES_PASSWORD) delete process.env.POSTGRES_URL;
+  // Local development uses the split MySQL settings from .env.
+  if (process.env.MYSQL_HOST && process.env.MYSQL_PASSWORD) delete process.env.MYSQL_URL;
 }

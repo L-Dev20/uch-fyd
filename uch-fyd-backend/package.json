@@ -13,10 +13,10 @@
     "identity": "node services/identity-admin/server.js",
     "catalog": "node services/catalog/server.js",
     "orders": "node services/orders/server.js",
-    "db:check": "node scripts/check-postgres.js"
+    "db:check": "node scripts/check-mysql.js"
   },
   "dependencies": {
     "mongodb": "^6.20.0",
-    "pg": "^8.23.1"
+    "mysql2": "^3.24.6"
   }
 }

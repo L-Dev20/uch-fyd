@@ -1,36 +1,35 @@
 
 services:
-  postgres:
-    image: postgres:16
+  mysql:
+    image: mysql:8.4
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-uchfyd}
-      POSTGRES_USER: ${POSTGRES_USER:-uchfyd}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD es obligatorio}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-uchfyd}
+      MYSQL_USER: ${MYSQL_USER:-uchfyd}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD es obligatorio}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD es obligatorio}
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
       interval: 5s
       timeout: 4s
-      retries: 20
+      retries: 24
     restart: unless-stopped
 
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@correo.com
-      PGADMIN_DEFAULT_PASSWORD: TuPasswordSeguro123
-    ports:
-      - "8080:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    depends_on:
-      postgres:
-        condition: service_healthy
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: uchfyd-phpmyadmin
     restart: unless-stopped
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+    depends_on:
+      mysql:
+        condition: service_healthy
 
 volumes:
-  postgres_data:
-  pgadmin_data:
+  mysql_data:
