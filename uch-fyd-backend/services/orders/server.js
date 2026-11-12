@@ -101,12 +101,17 @@ function normalizeItems(items) {
 }
 
 function shape(order) {
+  const shippingAddress = typeof order.shipping_address === "string"
+    ? JSON.parse(order.shipping_address)
+    : order.shipping_address;
   return {
     id: String(order.id),
     numero: String(order.id),
+    ...(order.usuario_id ? { userId: String(order.usuario_id) } : {}),
     estado: order.status,
     total: Number(order.total),
     createdAt: order.created_at,
+    shippingAddress: shippingAddress || null,
     items: (order.items || []).map(item => ({
       productoId: String(item.product_id),
       nombre: item.name,
@@ -124,6 +129,7 @@ async function readOrders(where, values, limit) {
       p.estado AS status,
       p.total,
       p.creado_en AS created_at,
+      p.direccion_envio AS shipping_address,
       i.product_id,
       i.nombre AS name,
       i.cantidad AS quantity,
@@ -142,9 +148,11 @@ async function readOrders(where, values, limit) {
     if (!map.has(row.id)) {
       map.set(row.id, {
         id: row.id,
+        usuario_id: row.usuario_id,
         status: row.status,
         total: row.total,
         created_at: row.created_at,
+        shipping_address: row.shipping_address,
         items: []
       });
     }
@@ -173,9 +181,26 @@ async function createOrder(req, user) {
 
   const body = await readJson(req);
   const items = normalizeItems(body.items);
+  const address = body.shippingAddress || {};
+  const shippingAddress = {
+    name: String(address.name || "").trim(),
+    address: String(address.address || "").trim(),
+    city: String(address.city || "").trim(),
+    postalCode: String(address.postalCode || "").trim(),
+    phone: String(address.phone || "").trim()
+  };
+  if (
+    shippingAddress.name.length < 2 || shippingAddress.name.length > 120 ||
+    shippingAddress.address.length < 5 || shippingAddress.address.length > 200 ||
+    shippingAddress.city.length < 2 || shippingAddress.city.length > 100 ||
+    shippingAddress.postalCode.length < 2 || shippingAddress.postalCode.length > 20 ||
+    shippingAddress.phone.length < 7 || shippingAddress.phone.length > 30
+  ) {
+    throw new HttpError(400, "Completá correctamente los datos de entrega.");
+  }
 
   const hash = createHash("sha256")
-    .update(JSON.stringify(items))
+    .update(JSON.stringify({ items, shippingAddress }))
     .digest("hex");
 
   try {
@@ -267,9 +292,9 @@ async function createOrder(req, user) {
 
       await client.query(
         `INSERT INTO pedidos
-         (id, usuario_id, estado, total)
-         VALUES ($1, $2, 'confirmado', $3)`,
-        [orderId, user.sub, total]
+         (id, usuario_id, estado, total, direccion_envio)
+         VALUES ($1, $2, 'confirmado', $3, $4)`,
+        [orderId, user.sub, total, JSON.stringify(shippingAddress)]
       );
 
       for (const item of locked) {
@@ -294,6 +319,7 @@ async function createOrder(req, user) {
         status: "confirmado",
         total,
         created_at: new Date(),
+        shipping_address: shippingAddress,
         items: locked.map(item => ({
           product_id: item.productId,
           name: item.name,
@@ -351,7 +377,7 @@ async function router(req, res) {
 
   if (url.pathname === "/" && req.method === "POST") {
     const user = authenticate(req);
-    authorize(user, "client", "admin");
+    authorize(user, "client");
 
     const result = await createOrder(req, user);
 
@@ -360,6 +386,7 @@ async function router(req, res) {
 
   if (url.pathname === "/" && req.method === "GET") {
     const user = authenticate(req);
+    authorize(user, "client");
 
     const limit = Math.min(
       Math.max(Number(url.searchParams.get("limit") || 50), 1),
@@ -381,6 +408,7 @@ async function router(req, res) {
 
   if (route && req.method === "GET") {
     const user = authenticate(req);
+    authorize(user, "client");
 
     const rows = await readOrders(
       "p.id = $1 AND p.usuario_id = $2",
@@ -427,6 +455,17 @@ async function start() {
       creado_en DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
     )
   `);
+
+  const addressColumn = await query(
+    `SELECT COUNT(*) AS count
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'pedidos'
+       AND COLUMN_NAME = 'direccion_envio'`
+  );
+  if (!Number(addressColumn.rows[0].count)) {
+    await query("ALTER TABLE pedidos ADD COLUMN direccion_envio JSON NULL");
+  }
 
   await query(`
     CREATE TABLE IF NOT EXISTS pedido_items (

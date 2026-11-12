@@ -10,12 +10,14 @@ window.UCHFYD_CONFIG = {
   demoMode: useDemoData,
   routes: {
     products: "/api/v1/catalogo/productos",
+    categories: "/api/v1/catalogo/categorias",
     login: "/api/v1/identidad/login",
     register: "/api/v1/identidad/registro",
     me: "/api/v1/identidad/usuario",
     orders: "/api/v1/pedidos",
     // Identity and Administration are exposed by the same service.
     adminProducts: "/api/v1/identidad/administracion/productos",
+    adminCategories: "/api/v1/identidad/administracion/categorias",
     adminOrders: "/api/v1/identidad/administracion/pedidos",
     adminUsers: "/api/v1/identidad/administracion/usuarios"
   }

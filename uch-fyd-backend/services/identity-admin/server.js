@@ -56,6 +56,11 @@ async function router(req, res, requestId) {
     getAdmin(req); const items = await users.find({}, { projection: { hash: 0, salt: 0 } }).sort({ createdAt: -1 }).limit(200).toArray();
     return json(res, 200, { items: items.map(view) });
   }
+  if (url.pathname === "/administracion/categorias" && req.method === "POST") {
+    getAdmin(req);
+    const result = await callInternal(`${CATALOG_URL}/interno/categorias`, { method: "POST", body: await readJson(req), token: bearer(req), requestId });
+    return json(res, 201, result);
+  }
   const userAction = url.pathname.match(/^\/administracion\/usuarios\/([^/]+)\/(activar|rol)$/);
   if (userAction && req.method === "PATCH") {
     getAdmin(req); if (!ObjectId.isValid(userAction[1])) throw new HttpError(400, "Identificador de usuario inválido.");
@@ -76,8 +81,21 @@ async function router(req, res, requestId) {
     return json(res, 200, result);
   }
   if (url.pathname === "/administracion/pedidos" && req.method === "GET") {
-    getAdmin(req); const result = await callInternal(`${ORDERS_URL}/interno/administracion/pedidos${url.search}`, { token: bearer(req), requestId });
-    return json(res, 200, result);
+    getAdmin(req);
+    const result = await callInternal(`${ORDERS_URL}/interno/administracion/pedidos${url.search}`, { token: bearer(req), requestId });
+    const items = result.items || [];
+    const userIds = [...new Set(items.map(order => order.userId).filter(id => ObjectId.isValid(id)))].map(id => new ObjectId(id));
+    const accounts = userIds.length
+      ? await users.find({ _id: { $in: userIds } }, { projection: { name: 1 } }).toArray()
+      : [];
+    const names = new Map(accounts.map(user => [String(user._id), user.name]));
+    return json(res, 200, {
+      ...result,
+      items: items.map(({ userId, ...order }) => ({
+        ...order,
+        cliente: names.get(userId) || "Cuenta no disponible"
+      }))
+    });
   }
   return json(res, 404, { error: "NOT_FOUND", message: "Ruta de Identidad/Administración no encontrada." });
 }
